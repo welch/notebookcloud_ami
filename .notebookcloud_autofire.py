@@ -25,8 +25,7 @@ except: # if not, we'll try and configure it
     user_data = user_data.split('|')
 
     # exit here if this instance was started without valid user data
-    if len(user_data) != 6:
-        sys.exit()
+    if len(user_data) != 6: sys.exit()
 
     # get the password, which is hashed before it is sent
     password = user_data.pop()
