@@ -7,26 +7,29 @@
 # Author: Carl Smith, Piousoft
 # MailTo: carl.input@gmail.com
 
-import os, sys
+import os, sys, urlparse, urllib, server
 
+PEM_PATH = '/home/ubuntu/.ipython/profile_nbserver/cert.pem'
+
+# get this instance's user data and convert it to a list
+user_data = urllib.urlopen('http://169.254.169.254/latest/user-data').read()
+user_data = user_data.split('|')
+
+nb_url = user_data.pop() if len(user_data) == 7 else None
+
+# exit here if this instance was started without valid user data
+if len(user_data) != 6: sys.exit()
+    
 try: # see if the server is configured yet
 
-    test = open('/home/ubuntu/.ipython/profile_nbserver/cert.pem', 'r')
+    test = open(PEM_PATH, 'r')
     test.close()
 
 except: # if not, we'll try and configure it
     
-    from urllib import urlopen
     from OpenSSL import crypto, SSL
     from socket import gethostname
-
-    # get this instance's user data and convert it to a list
-    user_data = urlopen('http://169.254.169.254/latest/user-data').read()
-    user_data = user_data.split('|')
-
-    # exit here if this instance was started without valid user data
-    if len(user_data) != 6: sys.exit()
-
+        
     # get the password, which is hashed before it is sent
     password = user_data.pop()
 
@@ -34,12 +37,12 @@ except: # if not, we'll try and configure it
     config_code = (
     "c = get_config()\n"
     "c.IPKernelApp.pylab = 'inline'\n"
-    "c.NotebookApp.certfile = u'/home/ubuntu/.ipython/profile_nbserver/cert.pem'\n"
+    "c.NotebookApp.certfile = u'%s'\n"
     "c.NotebookApp.ip = '*'\n"
     "c.NotebookApp.open_browser = False\n"
     "c.NotebookApp.password = u'{0}'\n"
     "c.NotebookApp.port = 8888\n"
-    )
+    )  % PEM_PATH
     config_file = '/home/ubuntu/.ipython/profile_nbserver/ipython_notebook_config.py'
     open(config_file, 'w').write(config_code.format(password))
 
@@ -66,9 +69,19 @@ except: # if not, we'll try and configure it
     # turn key and cert into a couple of strings and flush it to a file
     key  = crypto.dump_privatekey(crypto.FILETYPE_PEM, key)
     cert = crypto.dump_certificate(crypto.FILETYPE_PEM, cert)
-    open('/home/ubuntu/.ipython/profile_nbserver/cert.pem', 'w').write(key + cert)
+    open(PEM_PATH, 'w').write(key + cert)
 
+# fetch notebook if we haven't already
+if nb_url and not os.path.exists('/home/ubuntu/notebooks'):
+    try:
+        server.system('/usr/bin/git ls-remote %s' % nb_url)
+        server.system('/usr/bin/git clone %s /home/ubuntu/notebooks' % nb_url)
+    except Exception, err:
+        server.serve_text(8888, err, 500, PEM_PATH)
+        # never return
 
 # now fire it all up
+if not os.path.exists('/home/ubuntu/notebooks'):
+    os.mkdir('/home/ubuntu/notebooks')
 os.chdir('/home/ubuntu/notebooks')
 os.system('ipython notebook --profile=nbserver')
